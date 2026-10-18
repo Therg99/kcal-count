@@ -15,16 +15,18 @@ Para actualizar, descarga e instala el APK nuevo encima: **se conservan tus dato
 ## Funciones
 
 - **Diario por día** dividido en desayuno, comida, cena y snacks, con navegación entre días.
-- **Resumen**: anillo de kcal restantes y barras de proteína, carbohidratos y grasa frente a tus objetivos.
-- **Base de alimentos** (valores por 100 g) con ~20 básicos precargados; crea los tuyos, con raciones opcionales
-  (p. ej. «1 huevo = 60 g»).
-- **Búsqueda en [Open Food Facts](https://openfoodfacts.org)** y **escáner de código de barras** (escáner de Google).
-  Los productos que añades se guardan para usarlos sin conexión.
-- **Recientes primero** al buscar, y botón para **copiar las comidas del día anterior**.
-- **Historial** con totales diarios y media de los últimos 7 días.
-- **Calculadora de objetivos** (Mifflin-St Jeor + actividad + objetivo de perder/mantener/ganar).
-- **Recordatorio diario** (notificación a la hora que elijas).
-- **Copia de seguridad**: exportar (menú compartir de Android: Drive, correo…) e importar en JSON.
+- **Kcal y macros** frente a tus objetivos (por defecto 2900 kcal · 125 g P · 420 g C · 80 g G; modificables en Ajustes).
+- **Micronutrientes con objetivo diario fijo**: fibra, azúcares libres, sal, grasas (saturada, trans, omega-6, ALA,
+  EPA + DHA), 14 vitaminas (A, D, E, K, B1–B12, C, colina), 13 minerales y agua. Cada uno con su % del día.
+- **Todos los alimentos llevan siempre todos los valores** (por 100 g): no se puede guardar ni registrar un alimento
+  con datos vacíos. Si falta algo se pide completarlo (pon 0 si no lo contiene).
+- **Base de alimentos** con 22 básicos precargados (incluida el agua), con valores aproximados de tablas USDA/BEDCA;
+  biotina, yodo, molibdeno, cloro y flúor son estimaciones. Puedes corregirlos desde *Alimentos*.
+- **Búsqueda en [Open Food Facts](https://openfoodfacts.org)** y **escáner de código de barras**. Los productos de
+  Open Food Facts casi nunca traen todos los micronutrientes: al elegirlos se abre el editor para completarlos.
+- **Historial** con totales diarios y media de los últimos 7 días (macros y micros).
+- **Recordatorio diario** a la hora que elijas.
+- **Copia de seguridad**: exportar (menú compartir de Android) e importar en JSON.
 
 ## Cómo está hecha
 
