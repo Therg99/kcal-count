@@ -1,0 +1,14 @@
+{
+  "appId": "com.therg99.kcalcount",
+  "appName": "kcal",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#0f1115"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_kcal",
+      "iconColor": "#22c55e"
+    }
+  }
+}

@@ -7,6 +7,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<':
 const r0 = n => Math.round(n || 0);
 const r1 = n => Math.round((n || 0) * 10) / 10;
 const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
+// Plugins nativos de Capacitor (null cuando se abre en el navegador)
+const Native = window.Capacitor?.isNativePlatform?.() ? window.Capacitor.Plugins : null;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 const dateKey = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -71,6 +73,7 @@ const DEFAULT_STATE = {
   foods: SEED_FOODS,
   log: {},       // { 'YYYY-MM-DD': [entry] }
   recent: {},    // { foodId: timestamp }
+  reminder: { on: false, time: '21:00' },
 };
 
 let state;
@@ -470,30 +473,50 @@ async function lookupBarcode(code) {
 }
 
 /* ---------- Escáner ---------- */
-function openScanner(meal) {
-  const supported = 'BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia;
+async function nativeScan(meal) {
+  const BS = Native.BarcodeScanner;
+  try {
+    const { available } = await BS.isGoogleBarcodeScannerModuleAvailable();
+    if (!available) {
+      await BS.installGoogleBarcodeScannerModule();
+      toast('Instalando el escáner de Google, inténtalo en unos segundos');
+      return;
+    }
+    const { barcodes } = await BS.scan({ formats: ['EAN_13', 'EAN_8', 'UPC_A', 'UPC_E'] });
+    const code = barcodes[0]?.rawValue;
+    if (code) handleBarcode(code, meal);
+  } catch (e) {
+    if (!/cancel/i.test(String(e?.message))) openScanner(meal, true);
+  }
+}
+
+async function handleBarcode(code, meal) {
+  toast('Buscando ' + code + '…');
+  try {
+    const f = await lookupBarcode(code);
+    if (f) openQuantity(f, meal);
+    else { toast('Producto no encontrado, créalo'); openFoodEditor({ barcode: code }, nf => openQuantity(nf, meal)); }
+  } catch {
+    toast('Error de conexión');
+  }
+}
+
+// manualOnly: formulario para escribir el código (si no hay escáner disponible)
+function openScanner(meal, manualOnly = false) {
+  if (Native && !manualOnly) return nativeScan(meal);
+  const supported = !manualOnly && 'BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia;
   openSheet(`
     <div class="row between"><h2>Escanear código</h2>
       <button class="btn ghost" id="close">Cerrar</button></div>
     ${supported ? '<video id="video" playsinline muted></video><div class="small muted" id="scanMsg" style="margin-top:6px">Apunta al código de barras…</div>'
-      : '<div class="small muted">Tu navegador no permite escanear con la cámara (p. ej. Safari en iPhone). Escribe el código manualmente:</div>'}
+      : '<div class="small muted">No se puede escanear con la cámara. Escribe el código manualmente:</div>'}
     <label>Código</label>
     <div class="row"><input id="code" class="grow" inputmode="numeric" placeholder="8410000000000">
       <button class="btn primary" id="go">Buscar</button></div>
   `, sh => {
     let stream = null, timer = null, done = false;
     const stop = () => { done = true; clearInterval(timer); stream?.getTracks().forEach(t => t.stop()); };
-    const handle = async code => {
-      stop();
-      toast('Buscando ' + code + '…');
-      try {
-        const f = await lookupBarcode(code);
-        if (f) openQuantity(f, meal);
-        else { toast('Producto no encontrado, créalo'); openFoodEditor({ barcode: code }, nf => openQuantity(nf, meal)); }
-      } catch {
-        toast('Error de conexión');
-      }
-    };
+    const handle = code => { stop(); handleBarcode(code, meal); };
     $('#close', sh).onclick = closeSheet;
     $('#go', sh).onclick = () => { const c = $('#code', sh).value.trim(); if (c) handle(c); };
     if (supported) {
@@ -641,6 +664,16 @@ function renderSettings() {
       <button class="btn block" id="applyCalc">Usar estos objetivos</button>
     </div>
 
+    ${Native ? `
+    <div class="card">
+      <h2>Recordatorio diario</h2>
+      <div class="small muted">Una notificación cada día para que no se te olvide apuntar lo que comes.</div>
+      <div class="row" style="margin-top:10px">
+        <label class="row grow" style="margin:0;color:var(--text)"><input id="remOn" type="checkbox" style="width:auto"> Activado</label>
+        <input id="remTime" type="time" style="width:auto" value="${esc(state.reminder.time)}">
+      </div>
+    </div>` : ''}
+
     <div class="card">
       <h2>Datos</h2>
       <div class="small muted">Todo se guarda solo en este dispositivo. Haz copias de seguridad de vez en cuando.</div>
@@ -684,11 +717,34 @@ function renderSettings() {
     save(); render(); toast('Objetivos actualizados');
   };
 
-  $('#export').onclick = () => {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const remOn = $('#remOn');
+  if (remOn) {
+    remOn.checked = state.reminder.on;
+    remOn.onchange = $('#remTime').onchange = async () => {
+      state.reminder = { on: remOn.checked, time: $('#remTime').value || '21:00' };
+      save();
+      const ok = await scheduleReminder();
+      if (state.reminder.on && !ok) { remOn.checked = state.reminder.on = false; save(); toast('Activa las notificaciones de kcal en los ajustes de Android'); }
+      else toast(state.reminder.on ? `Recordatorio a las ${state.reminder.time}` : 'Recordatorio desactivado');
+    };
+  }
+
+  $('#export').onclick = async () => {
+    const json = JSON.stringify(state, null, 2);
+    const name = `kcal-count-${todayKey()}.json`;
+    if (Native) {
+      try {
+        const { uri } = await Native.Filesystem.writeFile({ path: name, data: json, directory: 'CACHE', encoding: 'utf8' });
+        await Native.Share.share({ title: 'Copia de kcal-count', files: [uri], dialogTitle: 'Guardar copia en…' });
+      } catch (e) {
+        if (!/cancel/i.test(String(e?.message))) toast('No se pudo exportar');
+      }
+      return;
+    }
+    const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `kcal-count-${todayKey()}.json`;
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -713,6 +769,29 @@ function renderSettings() {
   };
 }
 
+/* ---------- Recordatorio (solo Android) ---------- */
+const REMINDER_ID = 1;
+async function scheduleReminder() {
+  if (!Native) return true;
+  const LN = Native.LocalNotifications;
+  try {
+    await LN.cancel({ notifications: [{ id: REMINDER_ID }] });
+    if (!state.reminder.on) return true;
+    const perm = await LN.requestPermissions();
+    if (perm.display !== 'granted') return false;
+    const [hour, minute] = state.reminder.time.split(':').map(Number);
+    await LN.schedule({ notifications: [{
+      id: REMINDER_ID,
+      title: 'kcal',
+      body: '¿Has apuntado lo que has comido hoy?',
+      schedule: { on: { hour, minute }, allowWhileIdle: true },
+    }] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ---------- Arranque ---------- */
 load();
 $$('.tabbar button').forEach(b => b.onclick = () => { currentTab = b.dataset.tab; closeSheet(); render(); window.scrollTo(0, 0); });
@@ -729,6 +808,12 @@ document.addEventListener('visibilitychange', () => {
 });
 render();
 
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+if (Native) {
+  // Botón atrás de Android: cierra la hoja, vuelve a «Hoy» o minimiza la app
+  Native.App.addListener('backButton', () => {
+    if (!$('#sheet').hidden) closeSheet();
+    else if (currentTab !== 'today') { currentTab = 'today'; render(); }
+    else Native.App.minimizeApp();
+  });
+  Native.App.addListener('resume', () => document.dispatchEvent(new Event('visibilitychange')));
 }
