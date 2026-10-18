@@ -239,36 +239,34 @@ function render() {
 }
 
 /* ---------- Componentes ---------- */
-function ring(value, goal) {
-  const R = 54, C = 2 * Math.PI * R;
-  const pct = goal > 0 ? Math.min(value / goal, 1) : 0;
+const pctOf = (v, goal) => (goal > 0 ? v / goal * 100 : 0);
+const segBar = (pct, over) => `<div class="track ${over ? 'over' : ''}"><div class="fill" style="width:${Math.min(pct, 100)}%"></div></div>`;
+
+// Lectura principal de kcal: número grande + barra segmentada
+function readout(value, goal) {
   const over = value > goal;
+  const pct = pctOf(value, goal);
   return `
-    <div class="ring ${over ? 'over' : ''}">
-      <svg viewBox="0 0 132 132">
-        <circle cx="66" cy="66" r="${R}" fill="none" class="ring-track" stroke-width="8"/>
-        <circle cx="66" cy="66" r="${R}" fill="none" class="ring-fill" stroke-width="8"
-          stroke-linecap="round" stroke-dasharray="${C * pct} ${C}"/>
-      </svg>
-      <div class="center">
-        <span class="big">${r0(Math.abs(goal - value))}</span>
-        <span class="small muted">${over ? 'kcal de más' : 'kcal restantes'}</span>
-      </div>
+    <div class="readout ${over ? 'over' : ''}">
+      <div class="label">// ${over ? 'Exceso' : 'Restante'}</div>
+      <div class="big">${r0(Math.abs(goal - value))}<span>kcal</span></div>
+      ${segBar(pct, over)}
+      <div class="label row between"><span>${r0(value)} consumidas</span><span>${r0(pct)}% · ${r0(goal)}</span></div>
     </div>`;
 }
-function bar(label, value, goal, unit, { max = false } = {}) {
-  const pct = goal > 0 ? value / goal * 100 : 0;
-  const over = max ? pct > 100 : pct > 105;
+function macroCell(label, value, goal) {
+  const pct = pctOf(value, goal);
   return `
-    <div class="bar ${over ? 'over' : ''}">
-      <div class="lbl"><span>${label}</span><span class="muted">${fmt(value)} / ${fmt(goal)} ${unit}${max ? ' máx' : ''}</span></div>
-      <div class="track"><div class="fill" style="width:${Math.min(pct, 100)}%"></div></div>
+    <div class="mcell">
+      <div class="label">${label}</div>
+      <div class="val">${r0(value)}<small>/${r0(goal)} g</small></div>
+      ${segBar(pct, pct > 105)}
     </div>`;
 }
 // Lista de micronutrientes frente al valor diario recomendado
 function microRows(t) {
-  return GROUPS.map(g => `
-    <h3>${g}</h3>
+  return GROUPS.map((g, gi) => `
+    <h3><span class="idx">${String(gi + 1).padStart(2, '0')}</span>${g}</h3>
     ${MICROS.filter(m => m.g === g).map(m => {
       const minimal = m.max && m.rda === 0;
       const pct = m.rda > 0 ? t[m.k] / m.rda * 100 : 0;
@@ -278,7 +276,7 @@ function microRows(t) {
           <span class="mname">${m.name}</span>
           <span class="mval muted">${minimal ? `${fmt(t[m.k])} ${m.unit} · lo mínimo` : `${fmt(t[m.k])}/${fmt(m.rda)} ${m.unit}${m.max ? ' máx' : ''}`}</span>
           <span class="mpct">${minimal ? '' : r0(pct) + '%'}</span>
-          <div class="track"><div class="fill" style="width:${Math.min(pct, 100)}%"></div></div>
+          ${segBar(pct, over)}
         </div>`;
     }).join('')}`).join('');
 }
@@ -287,14 +285,14 @@ function microRows(t) {
 function renderToday() {
   const entries = dayEntries(currentDay);
   const t = dayTotals(currentDay), g = state.goals;
-  const meals = MEALS.map(m => {
+  const meals = MEALS.map((m, mi) => {
     const list = entries.filter(e => e.meal === m.id);
     const mt = sum(list.map(entryNutrients));
     return `
       <div class="card">
         <div class="meal-head">
-          <div><h2>${m.name}</h2><span class="small muted">${r0(mt.kcal)} kcal</span></div>
-          <button class="btn ghost" data-add="${m.id}">Añadir</button>
+          <div><h2><span class="idx">${String(mi + 1).padStart(2, '0')}</span>${m.name}</h2><span class="label">${r0(mt.kcal)} kcal</span></div>
+          <button class="btn" data-add="${m.id}">+ Añadir</button>
         </div>
         ${list.map(e => {
           const n = entryNutrients(e);
@@ -317,12 +315,11 @@ function renderToday() {
       <button class="iconbtn" id="nextDay" aria-label="Día siguiente">›</button>
     </div>
     <div class="card summary">
-      ${ring(t.kcal, g.kcal)}
-      <div class="bars">
-        <div class="small muted">${r0(t.kcal)} de ${r0(g.kcal)} kcal</div>
-        ${bar('Proteína', t.p, g.p, 'g')}
-        ${bar('Carbohidratos', t.c, g.c, 'g')}
-        ${bar('Grasa', t.f, g.f, 'g')}
+      ${readout(t.kcal, g.kcal)}
+      <div class="macros3">
+        ${macroCell('Proteína', t.p, g.p)}
+        ${macroCell('Carbos', t.c, g.c)}
+        ${macroCell('Grasa', t.f, g.f)}
       </div>
     </div>
     ${meals}
@@ -330,6 +327,7 @@ function renderToday() {
       ? `<button class="btn block" id="copyYesterday">Copiar comidas del día anterior</button>` : ''}
     <div class="card">
       <h2>Micronutrientes</h2>
+      <div class="label">// % del objetivo diario</div>
       ${microRows(t)}
     </div>
   `;
@@ -752,7 +750,7 @@ function renderHistory() {
           <div class="hday" data-day="${k}">
             <div class="row between"><span>${esc(dayLabel(k))}</span>
               <span><b>${r0(t.kcal)}</b> <span class="muted small">/ ${r0(g.kcal)} kcal</span></span></div>
-            <div class="bar ${t.kcal > g.kcal ? 'over' : ''}" style="margin:4px 0"><div class="track"><div class="fill" style="width:${Math.min(t.kcal / g.kcal * 100, 100)}%"></div></div></div>
+            ${segBar(pctOf(t.kcal, g.kcal), t.kcal > g.kcal)}
             ${macroLine(t)}
           </div>`;
       }).join('') : '<div class="empty">Sin registros</div>'}

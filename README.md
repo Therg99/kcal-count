@@ -33,6 +33,7 @@ Para actualizar, descarga e instala el APK nuevo encima: **se conservan tus dato
 App web (`www/`: HTML, CSS y JS sin dependencias) empaquetada como app nativa con
 [Capacitor](https://capacitorjs.com) (`android/`). Plugins nativos: escáner ML Kit, notificaciones locales,
 compartir archivos y botón atrás.
+Tipografías incluidas en `www/fonts/` (Archivo y JetBrains Mono, licencia SIL OFL 1.1).
 
 El workflow `.github/workflows/android.yml` compila el APK en cada push y lo publica en *Releases*
 (versión `1.0.<nº de ejecución>`).
